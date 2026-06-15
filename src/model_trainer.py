@@ -230,7 +230,7 @@ def train_all(features: pd.DataFrame) -> tuple[str, object, dict[str, dict[str, 
     best_xgb_params = None
     try:
         logging.info("Tuning XGBoost with Optuna (fast run: 10 trials)...")
-        best_xgb_params = tune_xgboost_optuna(x_train, y_train, n_trials=10)
+        best_xgb_params = tune_xgboost_optuna(x_train, y_train, n_trials=50)
     except Exception as exc:  # ImportError, RuntimeError, etc.
         logging.warning("Optuna/XGBoost tuning skipped: %s", exc)
 

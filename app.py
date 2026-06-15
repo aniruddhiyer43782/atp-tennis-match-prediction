@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from src.predict import active_players, competition_options, load_artifacts, predict_probability, shap_explanation
@@ -40,6 +41,40 @@ with controls[3]:
 
 competition_name = st.selectbox("Competition", competition_names)
 
+match_date = st.date_input(
+    "Match date",
+    value=pd.Timestamp.now().date(),
+    min_value=pd.Timestamp("2024-01-01").date(),
+)
+reference_date = pd.Timestamp(match_date)
+
+st.markdown("**Fatigue override (optional)**")
+st.caption("Leave at -1 to use automatic calculation from match history")
+
+fatigue_a_override = st.number_input(
+    f"{player_a} matches in last 14 days",
+    min_value=-1,
+    max_value=15,
+    value=-1,
+)
+fatigue_b_override = st.number_input(
+    f"{player_b} matches in last 14 days",
+    min_value=-1,
+    max_value=15,
+    value=-1,
+)
+
+player_a_row = players[players["player_name"] == player_a].iloc[0]
+player_b_row = players[players["player_name"] == player_b].iloc[0]
+
+fatigue_diff: int
+if fatigue_a_override >= 0 and fatigue_b_override >= 0:
+    fatigue_diff = fatigue_a_override - fatigue_b_override
+else:
+    from src.predict import compute_fatigue
+
+    fatigue_diff = compute_fatigue(player_a_row, reference_date) - compute_fatigue(player_b_row, reference_date)
+
 if st.button("Predict Match", type="primary"):
     try:
         probability, h2h_text, competition_text, feature_row = predict_probability(
@@ -55,6 +90,8 @@ if st.button("Predict Match", type="primary"):
             tournament_level=tournament_level,
             round_name=round_name,
             best_of=best_of,
+            reference_date=reference_date,
+            fatigue_diff=fatigue_diff,
         )
 
         st.metric(f"{player_a} win probability", f"{probability:.1%}")

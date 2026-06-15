@@ -132,6 +132,15 @@ def competition_stats(
     return rate_a - rate_b, matches_a - matches_b, text
 
 
+def compute_fatigue(player: pd.Series, reference_date: pd.Timestamp) -> int:
+    dates_str = player.get("recent_match_dates", "")
+    if not dates_str or pd.isna(dates_str):
+        return 0
+    dates = [pd.Timestamp(d) for d in str(dates_str).split(",") if d.strip()]
+    cutoff = reference_date - pd.Timedelta(days=14)
+    return sum(1 for d in dates if cutoff <= d < reference_date)
+
+
 def build_feature_row(
     player_a: pd.Series,
     player_b: pd.Series,
@@ -143,6 +152,8 @@ def build_feature_row(
     tournament_level: str,
     round_name: str,
     best_of: int,
+    reference_date: pd.Timestamp,
+    fatigue_diff: int,
 ) -> pd.DataFrame:
     h2h_rate, _ = h2h_win_rate(h2h, int(player_a["player_id"]), int(player_b["player_id"]))
     competition_win_rate_diff, competition_experience_diff, _ = competition_stats(
@@ -165,7 +176,7 @@ def build_feature_row(
         "h2h_win_rate": h2h_rate,
         "recent_form_diff": player_a["recent_form"] - player_b["recent_form"],
         "surface_form_diff": player_a[surface_form_column] - player_b[surface_form_column],
-        "fatigue_diff": 0,
+        "fatigue_diff": fatigue_diff,
         "serve_dom_diff": player_a["serve_dominance"] - player_b["serve_dominance"],
         "competition_win_rate_diff": competition_win_rate_diff,
         "competition_experience_diff": competition_experience_diff,
@@ -196,6 +207,8 @@ def predict_probability(
     tournament_level: str,
     round_name: str,
     best_of: int,
+    reference_date: pd.Timestamp,
+    fatigue_diff: int,
 ) -> tuple[float, str, str, pd.DataFrame]:
     if player_a_name == player_b_name:
         raise ValueError("Choose two different players.")
@@ -213,6 +226,8 @@ def predict_probability(
         tournament_level,
         round_name,
         best_of,
+        reference_date,
+        fatigue_diff,
     )
     probability = float(model.predict_proba(row)[0, 1])
     _, h2h_text = h2h_win_rate(h2h, int(player_a["player_id"]), int(player_b["player_id"]))

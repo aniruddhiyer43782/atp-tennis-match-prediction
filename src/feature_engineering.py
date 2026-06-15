@@ -317,6 +317,11 @@ def state_snapshot(states: dict[int, PlayerState]) -> pd.DataFrame:
                 "grass_form": mean_or_default(state.surface_results["Grass"]),
                 "serve_dominance": mean_or_default(state.serve_points_won),
                 "last_match_date": max(state.match_dates) if state.match_dates else pd.NaT,
+                "recent_match_dates": ",".join([
+                    str(d.date())
+                    for d in sorted(state.match_dates)
+                    if d >= pd.Timestamp.now() - pd.Timedelta(days=60)
+                ]),
                 "matches_tracked_for_fatigue": len(state.match_dates),
             }
         )
