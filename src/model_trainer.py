@@ -118,6 +118,7 @@ def build_models() -> dict[str, object]:
                 colsample_bytree=0.9,
                 eval_metric="logloss",
                 random_state=42,
+                verbosity=0,
             )
         )
     except ImportError:
@@ -134,6 +135,7 @@ def build_models() -> dict[str, object]:
                 subsample=0.9,
                 colsample_bytree=0.9,
                 random_state=42,
+                verbosity=-1,
             )
         )
     except ImportError:
