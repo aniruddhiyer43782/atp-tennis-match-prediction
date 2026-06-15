@@ -31,7 +31,7 @@ The current calibrated models were trained on matches from 2010-2022 and tested 
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Calibrated Logistic Regression | 0.650 | 0.708 | 0.650 | 0.217 | 0.622 |
 | Calibrated Random Forest | 0.648 | 0.710 | 0.648 | 0.217 | 0.623 |
-| Calibrated XGBoost | 0.649 | 0.710 | 0.648 | 0.217 | 0.622 |
+| Calibrated XGBoost | 0.651 | 0.711 | 0.651 | 0.217 | 0.622 |
 | Calibrated LightGBM | 0.646 | 0.707 | 0.645 | 0.218 | 0.624 |
 
 Current best model by ROC-AUC: Calibrated XGBoost.
@@ -92,6 +92,8 @@ That is the difference between a model that only looks good on paper and a model
 - Competition-specific historical win rate and match experience
 - Recent form over last 10 matches
 - Surface form over last 10 matches on the same surface
-- Fatigue difference based on matches in the last 14 days
+- Date-aware fatigue difference based on matches in the last 14 days
 - Recent serve dominance difference
+- Ranking trend difference
 - Surface and tournament-level one-hot features
+- Per-prediction SHAP explanations for the selected matchup

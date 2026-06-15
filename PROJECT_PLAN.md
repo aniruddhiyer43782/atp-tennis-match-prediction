@@ -41,6 +41,7 @@ Feature groups:
 - Surface form over last 10 matches on that surface
 - Fatigue based on matches in previous 14 days
 - Recent serve dominance
+- Ranking trend over recent match history
 - Round, surface, tournament level, best-of-five context
 
 ## Phase 3: Modelling
@@ -48,13 +49,14 @@ Feature groups:
 - Use train years up to 2022.
 - Use test years 2023-2026.
 - Compare Logistic Regression, Random Forest, XGBoost, and LightGBM where installed.
+- Tune XGBoost with Optuna using time-series validation on training data only.
 - Select best model by ROC-AUC, while also reporting accuracy and F1.
 - Save model and metadata.
 
 ## Phase 4: Placement Polish
 
 - Add probability calibration. Done with sigmoid calibration and time-series cross-validation.
-- Add SHAP or permutation importance.
+- Add SHAP or permutation importance. Done with SHAP explanations from the base estimator behind the calibrated model.
 - Build Streamlit app.
 - Add visual evaluation report.
 - Write final README with results, architecture, and interview explanation.

@@ -141,6 +141,13 @@ def compute_fatigue(player: pd.Series, reference_date: pd.Timestamp) -> int:
     return sum(1 for d in dates if cutoff <= d < reference_date)
 
 
+def numeric_value(row: pd.Series, column: str, default: float = 0.0) -> float:
+    value = row.get(column, default)
+    if pd.isna(value):
+        return default
+    return float(value)
+
+
 def build_feature_row(
     player_a: pd.Series,
     player_b: pd.Series,
@@ -180,7 +187,7 @@ def build_feature_row(
         "serve_dom_diff": player_a["serve_dominance"] - player_b["serve_dominance"],
         "competition_win_rate_diff": competition_win_rate_diff,
         "competition_experience_diff": competition_experience_diff,
-        "rank_trend_diff": player_a["rank_trend"] - player_b["rank_trend"],
+        "rank_trend_diff": numeric_value(player_a, "rank_trend") - numeric_value(player_b, "rank_trend"),
         "surface_Clay": 0,
         "surface_Grass": 0,
         "surface_Hard": 0,
@@ -191,6 +198,9 @@ def build_feature_row(
     }
     row[SURFACE_COLUMN[surface]] = 1
     row[LEVEL_COLUMN[tournament_level]] = 1
+
+    for column in metadata["feature_columns"]:
+        row.setdefault(column, 0)
 
     return pd.DataFrame([row], columns=metadata["feature_columns"])
 

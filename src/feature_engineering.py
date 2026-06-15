@@ -92,7 +92,7 @@ def weighted_form(values: deque, default: float = 0.5) -> float:
     results = list(values)  # oldest to newest
     n = len(results)
     if n < len(MOMENTUM_WEIGHTS):
-        # Fewer than 10 matches — use last n weights and renormalise
+        # Fewer than 10 matches: use last n weights and renormalise.
         weights = MOMENTUM_WEIGHTS[-n:]
         total = sum(weights)
         weights = [w / total for w in weights]

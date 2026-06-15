@@ -178,8 +178,8 @@ def tune_xgboost_optuna(
 
         model = XGBClassifier(**params)
 
-        # TimeSeriesSplit inside Optuna — same principle as calibration
-        # We tune on training data only, never touching test set
+        # TimeSeriesSplit inside Optuna follows the same principle as calibration:
+        # tune on training data only, never touching the test set.
         tscv = TimeSeriesSplit(n_splits=5)
         scores = []
         for train_idx, val_idx in tscv.split(x_train):

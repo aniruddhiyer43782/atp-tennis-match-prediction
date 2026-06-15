@@ -68,10 +68,17 @@ player_a_row = players[players["player_name"] == player_a].iloc[0]
 player_b_row = players[players["player_name"] == player_b].iloc[0]
 
 fatigue_diff: int
-if fatigue_a_override >= 0 and fatigue_b_override >= 0:
-    fatigue_diff = fatigue_a_override - fatigue_b_override
-else:
-    fatigue_diff = compute_fatigue(player_a_row, reference_date) - compute_fatigue(player_b_row, reference_date)
+fatigue_a = (
+    int(fatigue_a_override)
+    if fatigue_a_override >= 0
+    else compute_fatigue(player_a_row, reference_date)
+)
+fatigue_b = (
+    int(fatigue_b_override)
+    if fatigue_b_override >= 0
+    else compute_fatigue(player_b_row, reference_date)
+)
+fatigue_diff = fatigue_a - fatigue_b
 
 if st.button("Predict Match", type="primary"):
     try:
@@ -110,6 +117,8 @@ if st.button("Predict Match", type="primary"):
             "competition_win_rate_diff",
             "competition_experience_diff",
         ]
+        if "rank_trend_diff" in feature_row.columns:
+            signal_columns.append("rank_trend_diff")
         st.dataframe(feature_row[signal_columns].T.rename(columns={0: "value"}), use_container_width=True)
 
         st.subheader("Why This Prediction")
