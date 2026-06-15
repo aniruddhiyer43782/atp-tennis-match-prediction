@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+data/processed/
+data/raw/
+models/
+reports/figures/
+
+*.pkl
+*.joblib
+*.parquet
+*.log
