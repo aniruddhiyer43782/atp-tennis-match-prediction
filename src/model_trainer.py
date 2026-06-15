@@ -78,7 +78,7 @@ def calibrate_model(model: object) -> CalibratedClassifierCV:
     )
 
 
-def build_models() -> dict[str, object]:
+def build_models(best_xgb_params: dict | None = None) -> dict[str, object]:
     models: dict[str, object] = {
         "calibrated_logistic_regression": calibrate_model(
             Pipeline(
@@ -109,8 +109,15 @@ def build_models() -> dict[str, object]:
     try:
         from xgboost import XGBClassifier
 
-        models["calibrated_xgboost"] = calibrate_model(
-            XGBClassifier(
+        if best_xgb_params:
+            xgb_classifier = XGBClassifier(
+                **best_xgb_params,
+                eval_metric="logloss",
+                random_state=42,
+                verbosity=0,
+            )
+        else:
+            xgb_classifier = XGBClassifier(
                 n_estimators=500,
                 learning_rate=0.03,
                 max_depth=4,
@@ -120,7 +127,8 @@ def build_models() -> dict[str, object]:
                 random_state=42,
                 verbosity=0,
             )
-        )
+
+        models["calibrated_xgboost"] = calibrate_model(xgb_classifier)
     except ImportError:
         logging.warning("xgboost is not installed; skipping XGBoost.")
 
@@ -142,6 +150,55 @@ def build_models() -> dict[str, object]:
         logging.warning("lightgbm is not installed; skipping LightGBM.")
 
     return models
+
+
+def tune_xgboost_optuna(
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+    n_trials: int = 50,
+) -> dict:
+    import optuna
+    from xgboost import XGBClassifier
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    def objective(trial):
+        params = {
+            "n_estimators": trial.suggest_int("n_estimators", 200, 800),
+            "max_depth": trial.suggest_int("max_depth", 3, 6),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+            "min_child_weight": trial.suggest_int("min_child_weight", 1, 7),
+            "reg_alpha": trial.suggest_float("reg_alpha", 0.0, 2.0),
+            "reg_lambda": trial.suggest_float("reg_lambda", 0.5, 5.0),
+            "eval_metric": "logloss",
+            "random_state": 42,
+            "verbosity": 0,
+        }
+
+        model = XGBClassifier(**params)
+
+        # TimeSeriesSplit inside Optuna — same principle as calibration
+        # We tune on training data only, never touching test set
+        tscv = TimeSeriesSplit(n_splits=5)
+        scores = []
+        for train_idx, val_idx in tscv.split(x_train):
+            x_tr = x_train.iloc[train_idx]
+            y_tr = y_train.iloc[train_idx]
+            x_val = x_train.iloc[val_idx]
+            y_val = y_train.iloc[val_idx]
+            model.fit(x_tr, y_tr)
+            probs = model.predict_proba(x_val)[:, 1]
+            scores.append(roc_auc_score(y_val, probs))
+
+        return sum(scores) / len(scores)
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=n_trials)
+
+    logging.info("Best Optuna ROC-AUC: %.4f", study.best_value)
+    logging.info("Best Optuna params: %s", study.best_params)
+    return study.best_params
 
 
 def evaluate_model(model: object, x_test: pd.DataFrame, y_test: pd.Series) -> dict[str, float]:
@@ -169,7 +226,15 @@ def train_all(features: pd.DataFrame) -> tuple[str, object, dict[str, dict[str, 
     results: dict[str, dict[str, float]] = {}
     fitted_models: dict[str, object] = {}
 
-    for name, model in build_models().items():
+    # Attempt to tune XGBoost with Optuna; if packages missing, skip tuning
+    best_xgb_params = None
+    try:
+        logging.info("Tuning XGBoost with Optuna (fast run: 10 trials)...")
+        best_xgb_params = tune_xgboost_optuna(x_train, y_train, n_trials=10)
+    except Exception as exc:  # ImportError, RuntimeError, etc.
+        logging.warning("Optuna/XGBoost tuning skipped: %s", exc)
+
+    for name, model in build_models(best_xgb_params=best_xgb_params).items():
         logging.info("Training %s", name)
         model.fit(x_train, y_train)
         metrics = evaluate_model(model, x_test, y_test)
