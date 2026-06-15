@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.predict import active_players, competition_options, load_artifacts, predict_probability
+from src.predict import active_players, competition_options, load_artifacts, predict_probability, shap_explanation
 
 
 st.set_page_config(page_title="ATP Match Predictor", page_icon="T", layout="wide")
@@ -76,5 +76,18 @@ if st.button("Predict Match", type="primary"):
             "competition_experience_diff",
         ]
         st.dataframe(feature_row[signal_columns].T.rename(columns={0: "value"}), use_container_width=True)
+
+        st.subheader("Why This Prediction")
+        explanation = shap_explanation(model, feature_row)
+        display_explanation = explanation.copy()
+        display_explanation["approx_probability_impact"] = (
+            display_explanation["approx_probability_impact"] * 100
+        ).round(2)
+        display_explanation["shap_value"] = display_explanation["shap_value"].round(4)
+        st.bar_chart(
+            explanation.set_index("feature")["approx_probability_impact"],
+            use_container_width=True,
+        )
+        st.dataframe(display_explanation, use_container_width=True)
     except Exception as exc:
         st.error(str(exc))

@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import json
+import math
+import os
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODELS_DIR = PROJECT_ROOT / "models"
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".matplotlib"))
 
 ROUND_ORDER = {
     "Round Robin": 1,
@@ -219,3 +223,55 @@ def predict_probability(
         competition_name,
     )
     return probability, h2h_text, competition_text, row
+
+
+def base_estimator(model: object) -> object:
+    """Return an interpretable fitted estimator behind a calibrated wrapper."""
+    calibrated_classifiers = getattr(model, "calibrated_classifiers_", None)
+    if calibrated_classifiers:
+        return calibrated_classifiers[0].estimator
+    return model
+
+
+def sigmoid(value: float) -> float:
+    return 1.0 / (1.0 + math.exp(-value))
+
+
+def shap_explanation(model: object, feature_row: pd.DataFrame, top_n: int = 8) -> pd.DataFrame:
+    """Explain a single prediction using the base tree estimator behind calibration."""
+    import shap
+
+    estimator = base_estimator(model)
+    explainer = shap.TreeExplainer(estimator)
+    values = explainer.shap_values(feature_row)
+
+    if isinstance(values, list):
+        values = values[-1]
+    values = np.asarray(values)
+    if values.ndim == 3:
+        values = values[:, :, -1]
+    shap_values = values[0]
+
+    expected_value = explainer.expected_value
+    if isinstance(expected_value, (list, np.ndarray)):
+        expected_value = np.asarray(expected_value).reshape(-1)[-1]
+    base_probability = sigmoid(float(expected_value))
+
+    explanation = pd.DataFrame(
+        {
+            "feature": feature_row.columns,
+            "value": feature_row.iloc[0].to_numpy(),
+            "shap_value": shap_values,
+        }
+    )
+    explanation["direction"] = np.where(explanation["shap_value"] >= 0, "increases", "decreases")
+    explanation["approx_probability_impact"] = explanation["shap_value"].apply(
+        lambda value: sigmoid(float(expected_value) + float(value)) - base_probability
+    )
+    explanation["abs_shap_value"] = explanation["shap_value"].abs()
+    return (
+        explanation.sort_values("abs_shap_value", ascending=False)
+        .head(top_n)
+        .drop(columns=["abs_shap_value"])
+        .reset_index(drop=True)
+    )
