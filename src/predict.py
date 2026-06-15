@@ -180,6 +180,7 @@ def build_feature_row(
         "serve_dom_diff": player_a["serve_dominance"] - player_b["serve_dominance"],
         "competition_win_rate_diff": competition_win_rate_diff,
         "competition_experience_diff": competition_experience_diff,
+        "rank_trend_diff": player_a["rank_trend"] - player_b["rank_trend"],
         "surface_Clay": 0,
         "surface_Grass": 0,
         "surface_Hard": 0,

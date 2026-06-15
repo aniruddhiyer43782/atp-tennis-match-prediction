@@ -25,6 +25,11 @@ ELO_K = 32.0
 RECENT_MATCHES = 10
 FATIGUE_DAYS = 14
 
+MOMENTUM_WEIGHTS = [0.05, 0.07, 0.08, 0.09, 0.10, 0.11, 0.12, 0.13, 0.12, 0.13]
+# Index 0 = oldest, index 9 = most recent
+# Most recent matches get highest weight
+# All weights sum to 1.0
+
 
 @dataclass
 class PlayerState:
@@ -36,6 +41,7 @@ class PlayerState:
     )
     match_dates: deque[pd.Timestamp] = field(default_factory=deque)
     serve_points_won: deque[float] = field(default_factory=lambda: deque(maxlen=RECENT_MATCHES))
+    rank_history: deque = field(default_factory=lambda: deque(maxlen=20))
     latest_name: str = ""
     latest_rank: float = 500.0
     latest_rank_points: float = 0.0
@@ -79,6 +85,22 @@ def mean_or_default(values: deque[float] | deque[int], default: float = 0.5) -> 
     return float(np.mean(values))
 
 
+def weighted_form(values: deque, default: float = 0.5) -> float:
+    """Compute weighted form with recent matches having higher weight."""
+    if not values:
+        return default
+    results = list(values)  # oldest to newest
+    n = len(results)
+    if n < len(MOMENTUM_WEIGHTS):
+        # Fewer than 10 matches — use last n weights and renormalise
+        weights = MOMENTUM_WEIGHTS[-n:]
+        total = sum(weights)
+        weights = [w / total for w in weights]
+    else:
+        weights = MOMENTUM_WEIGHTS
+    return float(sum(w * r for w, r in zip(weights, results)))
+
+
 def serve_win_rate(row: pd.Series, prefix: str) -> float | None:
     first_in = row.get(f"{prefix}_1stIn")
     first_won = row.get(f"{prefix}_1stWon")
@@ -100,6 +122,21 @@ def fatigue_count(state: PlayerState, current_date: pd.Timestamp) -> int:
     while state.match_dates and state.match_dates[0] < cutoff:
         state.match_dates.popleft()
     return len(state.match_dates)
+
+
+def rank_trend(state: PlayerState, current_date: pd.Timestamp, days: int = 90) -> float:
+    """Returns current_rank - rank_N_days_ago.
+    
+    Negative = improving (rank number going down is good)
+    Positive = declining
+    Returns 0 if insufficient history
+    """
+    cutoff = current_date - pd.Timedelta(days=days)
+    past_ranks = [rank for date, rank in state.rank_history if date <= cutoff]
+    if not past_ranks:
+        return 0.0  # not enough history, neutral
+    rank_then = past_ranks[-1]  # most recent rank before cutoff
+    return state.latest_rank - rank_then
 
 
 def h2h_key(player_a: int, player_b: int) -> tuple[int, int]:
@@ -164,12 +201,13 @@ def pre_match_features(
         "elo_diff": state_a.elo - state_b.elo,
         "surface_elo_diff": state_a.surface_elo[surface] - state_b.surface_elo[surface],
         "h2h_win_rate": h2h_rate(h2h, player_a_id, player_b_id),
-        "recent_form_diff": mean_or_default(state_a.recent_results) - mean_or_default(state_b.recent_results),
-        "surface_form_diff": mean_or_default(state_a.surface_results[surface]) - mean_or_default(state_b.surface_results[surface]),
+        "recent_form_diff": weighted_form(state_a.recent_results) - weighted_form(state_b.recent_results),
+        "surface_form_diff": weighted_form(state_a.surface_results[surface]) - weighted_form(state_b.surface_results[surface]),
         "fatigue_diff": fatigue_count(state_a, match_date) - fatigue_count(state_b, match_date),
         "serve_dom_diff": mean_or_default(state_a.serve_points_won) - mean_or_default(state_b.serve_points_won),
         "competition_win_rate_diff": competition_record_a.win_rate - competition_record_b.win_rate,
         "competition_experience_diff": competition_record_a.matches - competition_record_b.matches,
+        "rank_trend_diff": rank_trend(state_a, match_date) - rank_trend(state_b, match_date),
     }
 
 
@@ -193,6 +231,8 @@ def update_states(
     loser_state.latest_name = str(row["loser_name"])
     loser_state.latest_rank = float(row["loser_rank"])
     loser_state.latest_rank_points = float(row["loser_rank_points"])
+    winner_state.rank_history.append((match_date, float(row["winner_rank"])))
+    loser_state.rank_history.append((match_date, float(row["loser_rank"])))
 
     winner_state.elo, loser_state.elo = update_elo(winner_state.elo, loser_state.elo)
     winner_state.surface_elo[surface], loser_state.surface_elo[surface] = update_elo(
@@ -311,12 +351,13 @@ def state_snapshot(states: dict[int, PlayerState]) -> pd.DataFrame:
                 "hard_elo": state.surface_elo["Hard"],
                 "clay_elo": state.surface_elo["Clay"],
                 "grass_elo": state.surface_elo["Grass"],
-                "recent_form": mean_or_default(state.recent_results),
-                "hard_form": mean_or_default(state.surface_results["Hard"]),
-                "clay_form": mean_or_default(state.surface_results["Clay"]),
-                "grass_form": mean_or_default(state.surface_results["Grass"]),
+                "recent_form": weighted_form(state.recent_results),
+                "hard_form": weighted_form(state.surface_results["Hard"]),
+                "clay_form": weighted_form(state.surface_results["Clay"]),
+                "grass_form": weighted_form(state.surface_results["Grass"]),
                 "serve_dominance": mean_or_default(state.serve_points_won),
                 "last_match_date": max(state.match_dates) if state.match_dates else pd.NaT,
+                "rank_trend": rank_trend(state, max(state.match_dates) if state.match_dates else pd.Timestamp.now()),
                 "recent_match_dates": ",".join([
                     str(d.date())
                     for d in sorted(state.match_dates)
