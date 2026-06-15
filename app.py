@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from src.predict import active_players, competition_options, load_artifacts, predict_probability, shap_explanation
+from src.predict import active_players, competition_options, load_artifacts, predict_probability, shap_explanation, compute_fatigue
 
 
 st.set_page_config(page_title="ATP Match Predictor", page_icon="T", layout="wide")
@@ -71,8 +71,6 @@ fatigue_diff: int
 if fatigue_a_override >= 0 and fatigue_b_override >= 0:
     fatigue_diff = fatigue_a_override - fatigue_b_override
 else:
-    from src.predict import compute_fatigue
-
     fatigue_diff = compute_fatigue(player_a_row, reference_date) - compute_fatigue(player_b_row, reference_date)
 
 if st.button("Predict Match", type="primary"):
